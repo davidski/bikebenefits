@@ -1,0 +1,165 @@
+---
+title: "Bike Benefits"
+author: "David F. Severski"
+date: "July 9, 2016"
+output: 
+  html_document: 
+    code_folding: hide
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background and Motivation
+
+While in the factory store of our local bean-to-bar chocolatier, Theo's 
+Chocolate, the spouse pointed out a sign that bicyclists could purchase a sticker 
+for their helmet which would give them 50% off one of Theo's standard bars 
+each time they came in. I've long wanted a discount program for local folks 
+coming in so I jumped on this chance. Looking at the sticker, it turned out not 
+to be something specific to Theo's but a larger program run by [Bicycle 
+Benefits](http://www.bicyclebenefits.org/). What a terrific idea!
+
+An initial glance at the hosted map showed a large number of participating 
+business  nearby as well as a long list of cities where member business could be 
+found. The map is a standard Leaflet module with the data available via a 
+simple GET request or two. This stirred my curiosity to explore the data.
+
+# Data Acquisiton and Prepping
+
+A standard set of libraries here. I'm trying to use the `purrr` library more 
+to build familarity with its powerful fuctional idioms.
+
+```{r load_libraries, message=FALSE, warning=FALSE}
+library(jsonlite)
+library(purrr)
+library(httr)
+library(dplyr)
+library(DT)
+library(ggplot2)
+library(scales)
+```
+
+Fetch and clean the data.
+
+```{r acquisitons_inc}
+# fetch all cities
+cities_url <- 'http://www.bicyclebenefits.org/search/cities'
+#cities <- fromJSON(content(GET(cities_url), as = "text"), flatten = TRUE)
+#save(cities, file = "data/bikebenefits_cities.Rdata")
+load("data/bikebenefits_Cities.Rdata")
+
+# fetch the details for a given city
+get_biz <- function(city_id, base_url = 'http://www.bicyclebenefits.org/search/members?city_id=')  {
+  search_url <- paste0(base_url, city_id)
+  dat <- fromJSON(content(GET(search_url), as = "text"), flatten = TRUE)
+  dat$members$city_id <- city_id
+  dat$city$city_id <- city_id
+  return(dat)
+}
+
+#dat <- map(cities$id, get_biz)
+#save(dat, file = "data/bikebenefits.Rdata")
+load("data/bikebenefits.Rdata")
+
+# coerce member business into a dataframe and peel off categories into 
+# a more normalized table
+members <- map(dat, "members") %>% compact %>% bind_rows() %>% 
+  filter(!is.na(id))
+categories <- members %>% distinct(category.id, category.name, category.logo)
+categories[categories$category.logo == "","category.logo"] <- NA
+members <- members %>% select(-c(category.name, category.logo))
+
+# why do so many places publish the email addresses of their participants?!
+members <- select(members, -email)
+
+# coerce the states into a dataframe
+states <- map(dat, "city")
+states <- do.call(rbind, states) %>% as_data_frame
+states$state_name <- map_chr(states$state, "name")
+states <- select(states, -state) %>% simplify_all %>% bind_rows
+```
+
+# Exploration
+
+Three quick glances of the data at the level of geographic distribution, 
+member business types, and business specifically located in Seattle.
+
+## Geography
+```{r exploration}
+members %>% count(city_id, sort = TRUE) %>% 
+  left_join(cities, by = c("city_id" = "id")) %>% 
+  select(city_name = name, state.name, n) %>% 
+  datatable(rownames = NA)
+```
+
+Lots of activity in Charlotte. How does this look at a 
+state level?
+
+```{r}
+members %>% count(city_id, sort = TRUE) %>% 
+  left_join(cities, by = c("city_id" = "id")) %>% 
+  select(city_name = name, state.name, n) %>% 
+  group_by(state.name) %>% tally(n, sort = TRUE) %>% 
+  datatable(rownames = NA)
+```
+
+Wow. Wisconsin has a lot going on, while most of Washington's activity 
+is limited to Seattle.
+
+## Business Type
+
+Produce a table of the relative distribution of member categories per city.
+
+```{r}
+type_breakdown <- members %>% group_by(city_id) %>% 
+  mutate(city_count = n()) %>% ungroup %>% 
+  group_by(city_id, category.id) %>% 
+  summarize(total_per_city = n(),
+            cat_pct = n() / max(city_count)) %>% ungroup %>% 
+  arrange(city_id, desc(cat_pct)) %>% 
+  left_join(cities, by = c("city_id" = "id")) %>% 
+  left_join(categories, by = c("category.id" = "category.id"))
+type_breakdown %>% 
+  select(name, category.name, total_per_city, cat_pct) %>% 
+  datatable(rownames = FALSE) %>% formatPercentage('cat_pct')
+```
+
+## Seattle Uber Alles
+
+Finally, a quick view of the Seattle specific data.
+
+```{r}
+members %>% filter(city_id == '3') %>% 
+  left_join(categories, by = c("category.id" = "category.id")) %>% 
+  select(-c(starts_with("shipping"), extra_stickers, id, category.id, city_id, category.logo, status)) %>% 
+  datatable(rownames = FALSE)
+```
+
+Show the relative distributions of the types of member business for Seattle 
+and Portland. This may be the only time I've ever used sportball colors in a 
+plot. I feel a little dirty.
+
+```{r seattle_v_portland}
+facet_labels <- c(
+  '3' = "Seattle, WA",
+  '23' = "Portland, OR")
+type_breakdown %>% filter(city_id == '3' | city_id == '23') %>% 
+  mutate(city_id = as.factor(city_id)) %>% 
+  left_join(categories, by = c("category.id" = "category.id", "category.name" = "category.name")) %>% 
+  ggplot(., aes(x = category.name, y = cat_pct)) -> gg
+gg <- gg + geom_bar(stat = "identity", aes(fill = city_id))
+gg <- gg + scale_fill_manual(values = c("#002244", "#EAE727"), guide = FALSE)
+gg <- gg + labs(title = "Distribution of Bikeshare Participants by Category",
+                subtitle = "Seattle vs. Portland",
+                caption = "Source bikeshare.org\nRetrieved July 9, 2016",
+                x = "Business Type",
+                y = element_blank())
+gg <- gg + scale_y_continuous(labels = percent)
+gg <- gg + theme_minimal()
+gg <- gg + coord_flip()
+gg <- gg + facet_grid(. ~ city_id, labeller = as_labeller(facet_labels))
+gg
+```
