@@ -9,6 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Background and Motivation
+
+While in the factory store of our local bean-to-bar chcolatier, Theo's 
+Chocolate, the spouse pointed out a sign that bicyclists could purchase a sticker 
+for their helmet which would give them 50% off one of Theo's standard bars 
+each time they came in. I've long wanted a discount program for local folks 
+coming in so I jumped on this chance. Looking at the sticker, it turned out not 
+to be something specific to Theo's but a larger program run by (Bicycle 
+Benefits)[http://www.bicyclebenefits.org/].
+
+An initial glance at the map showed a large number of participating business 
+nearby as well as a long list of cities where member business could be 
+found. The map is a standard Leaflet module with the data available via a 
+simple GET request or two. This had me curious to see more about it....
+
 # Data Acquisiton and Prepping
 
 ```{r}
@@ -53,4 +68,28 @@ states <- select(states, -state) %>% simplify_all %>% bind_rows
 
 # Exploration
 
-members %>% count()
+## Geography
+```{r exploration}
+members %>% count(city_id, sort = TRUE) %>% 
+  left_join(cities, by = c("city_id" = "id")) %>% 
+  select(city_name = name, state.name, n)
+```
+
+Lots of activity in Charlotte. How does this look at a 
+state level?
+
+```{r}
+members %>% count(city_id, sort = TRUE) %>% 
+  left_join(cities, by = c("city_id" = "id")) %>% 
+  select(city_name = name, state.name, n) %>% 
+  group_by(state.name) %>% tally(n, sort = TRUE)
+```
+
+Wow. Wisconsin has a lot going on, while most of Washington's activity 
+looks limited to Seattle.
+
+## Business Type
+
+```{r}
+members %>% group_by(city_id, category.id) %>% tally
+```
