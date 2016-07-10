@@ -5,8 +5,9 @@ library(dplyr)
 
 # fetch all cities
 cities_url <- 'http://www.bicyclebenefits.org/search/cities'
-cities <- fromJSON(content(GET(cities_url), as = "text"), flatten = TRUE)
-save(cities, file = "data/bikebenifits_cities.Rdata")
+#cities <- fromJSON(content(GET(cities_url), as = "text"), flatten = TRUE)
+#save(cities, file = "data/bikebenefits_cities.Rdata")
+load("data/bikebenefits_Cities.Rdata")
 
 # fetch the details for a given city
 get_biz <- function(city_id, base_url = 'http://www.bicyclebenefits.org/search/members?city_id=')  {
@@ -17,14 +18,15 @@ get_biz <- function(city_id, base_url = 'http://www.bicyclebenefits.org/search/m
   return(dat)
 }
 
-dat <- map(cities$id, get_biz)
+#dat <- map(cities$id, get_biz)
+#save(dat, file = "data/bikebenefits.Rdata")
+load("data/bikebenefits.Rdata")
 
 # coerce member business into a dataframe and peel off categories into 
 # a more normalized table
 members <- map(dat, "members") %>% compact %>% bind_rows() %>% filter(!is.na(id))
 categories <- members %>% distinct(category.id, category.name, category.logo)
 members <- members %>% select(-c(category.name, category.logo))
-save(dat, file = "data/bikebenifits.Rdata")
 
 # coerce the states into a dataframe
 states <- map(dat, "city")
