@@ -24,8 +24,10 @@ load("data/bikebenefits.Rdata")
 
 # coerce member business into a dataframe and peel off categories into 
 # a more normalized table
-members <- map(dat, "members") %>% compact %>% bind_rows() %>% filter(!is.na(id))
+members <- map(dat, "members") %>% compact %>% bind_rows() %>% 
+  filter(!is.na(id))
 categories <- members %>% distinct(category.id, category.name, category.logo)
+categories[categories$category.logo == "","category.logo"] <- NA
 members <- members %>% select(-c(category.name, category.logo))
 
 # coerce the states into a dataframe
