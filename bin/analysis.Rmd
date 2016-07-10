@@ -1,3 +1,17 @@
+---
+title: "Bike Benefits"
+author: "David F. Severski"
+date: "July 9, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Acquisiton and Prepping
+
+```{r}
 library(jsonlite)
 library(purrr)
 library(httr)
@@ -35,3 +49,8 @@ states <- map(dat, "city")
 states <- do.call(rbind, states) %>% as_data_frame
 states$state_name <- map_chr(states$state, "name")
 states <- select(states, -state) %>% simplify_all %>% bind_rows
+```
+
+# Exploration
+
+members %>% count()
